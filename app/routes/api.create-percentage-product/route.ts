@@ -272,13 +272,17 @@ export async function action({ request }: ActionFunctionArgs) {
   );
   const existingVariantsJson = await existingVariantsResponse.json();
   const existingVariants = existingVariantsJson?.data?.product?.variants?.edges || [];
-  for (const variantEdge of existingVariants) {
-    const variantId = variantEdge.node.id;
-    await admin.graphql(
+  const variantIds = existingVariants.map((edge: any) => edge.node.id);
+console.log(productId,variantIds, 'variantIdsvariantIds')
+  if (variantIds.length > 0) {
+    const bulkDeleteResponse = await admin.graphql(
       `#graphql
-      mutation deleteVariant($input: ProductVariantDeleteInput!) {
-        productVariantDelete(input: $input) {
-          deletedProductVariantId
+      mutation bulkDeleteProductVariants($productId: ID!, $variantsIds: [ID!]!) {
+        productVariantsBulkDelete(productId: $productId, variantsIds: $variantsIds) {
+          product {
+            id
+            title
+          }
           userErrors {
             field
             message
@@ -287,10 +291,16 @@ export async function action({ request }: ActionFunctionArgs) {
       }`,
       {
         variables: {
-          input: { id: variantId }
-        }
-      }
+          productId,
+          variantsIds: variantIds
+        },
+      },
     );
+    const bulkDeleteJson = await bulkDeleteResponse.json();
+    const deleteErrors = bulkDeleteJson?.data?.productVariantsBulkDelete?.userErrors;
+    if (deleteErrors && deleteErrors.length > 0) {
+      console.warn("Failed to bulk delete variants:", deleteErrors);
+    }
   }
   // --- END DELETE VARIANTS ---
 

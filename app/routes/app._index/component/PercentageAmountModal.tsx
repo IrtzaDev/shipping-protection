@@ -12,18 +12,24 @@ export default function PercentageAmountModal({
   handleModalChange: () => void;
 }) {
   const [defaultFee, setDefaultFee] = useState("3");
-  const [minPrice, setMinPrice] = useState("0");
-  const [maxPrice, setMaxPrice] = useState("0");
+  const [minPrice, setMinPrice] = useState("");
+  const [maxPrice, setMaxPrice] = useState("");
   const fetcher: any = useFetcher();
 
   useEffect(() => {
     const data = JSON.parse(percentageProductData?.data || "{}");
     setDefaultFee(data?.cartValue || "3");
-    setMinPrice(data?.minPrice || "0");
-    setMaxPrice(data?.maxPrice || "0");
+    setMinPrice(data?.minPrice || "");
+    setMaxPrice(data?.maxPrice || "");
   }, [percentageProductData]);
 
   const handleSubmit = () => {
+    if (Number(minPrice) > Number(maxPrice)) {
+      shopify.toast.show("Minimum should not be greater than Maximum", {
+        isError: true,
+      });
+      return;
+    }
     const formPayload = {
       cartValue: defaultFee,
       minPrice,

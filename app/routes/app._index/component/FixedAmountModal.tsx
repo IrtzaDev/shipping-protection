@@ -12,18 +12,24 @@ export default function FixedAmountModal({
   handleModalChange: () => void;
 }) {
   const [defaultFee, setDefaultFee] = useState("3");
-  const [minPrice, setMinPrice] = useState("0");
-  const [maxPrice, setMaxPrice] = useState("0");
+  const [minPrice, setMinPrice] = useState("");
+  const [maxPrice, setMaxPrice] = useState("");
   const fetcher: any = useFetcher();
 
   useEffect(() => {
     const data = JSON.parse(fixedProductData?.data || "{}");
     setDefaultFee(data?.defaultFee || "3");
-    setMinPrice(data?.minPrice || "0");
-    setMaxPrice(data?.maxPrice || "0");
+    setMinPrice(data?.minPrice || "");
+    setMaxPrice(data?.maxPrice || "");
   }, [fixedProductData]);
 
   const handleSubmit = () => {
+    if (Number(minPrice) > Number(maxPrice)) {
+      shopify.toast.show("Invalid price range", {
+        isError: true,
+      });
+      return;
+    }
     const formPayload = {
       defaultFee,
       minPrice,
@@ -73,7 +79,7 @@ export default function FixedAmountModal({
                   if (numericValue < 0) {
                     return;
                   }
-                  setDefaultFee(value)
+                  setDefaultFee(value);
                 }
               }}
               autoComplete="off"
@@ -86,39 +92,44 @@ export default function FixedAmountModal({
               alignItems: "flex-end",
               gap: "12px",
               marginTop: "12px",
+              width: "100%",
             }}
           >
-            <TextField
-              label="Price range"
-              value={minPrice}
-              onChange={(value) => {
-                const numericValue = Number(value);
-                if (!isNaN(numericValue)) {
-                  if (numericValue < 0) {
-                    return;
+            <div style={{ width: "100%" }}>
+              <TextField
+                label="Price range"
+                value={minPrice}
+                onChange={(value) => {
+                  const numericValue = Number(value);
+                  if (!isNaN(numericValue)) {
+                    if (numericValue < 0) {
+                      return;
+                    }
+                    setMinPrice(value);
                   }
-                  setMinPrice(value)
-                }
-              }}
-              autoComplete="off"
-              type="number"
-            />
+                }}
+                autoComplete="off"
+                type="number"
+              />
+            </div>
             <span style={{ fontSize: "20px", marginBottom: "6px" }}>–</span>
-            <TextField
-              label=""
-              value={maxPrice}
-              onChange={(value) => {
-                const numericValue = Number(value);
-                if (!isNaN(numericValue)) {
-                  if (numericValue < 0) {
-                    return;
+            <div style={{ width: "100%" }}>
+              <TextField
+                label=""
+                value={maxPrice}
+                onChange={(value) => {
+                  const numericValue = Number(value);
+                  if (!isNaN(numericValue)) {
+                    if (numericValue < 0) {
+                      return;
+                    }
+                    setMaxPrice(value);
                   }
-                  setMaxPrice(value)
-                }
-              }}
-              autoComplete="off"
-              type="number"
-            />
+                }}
+                autoComplete="off"
+                type="number"
+              />
+            </div>
           </div>
         </Modal.Section>
       </Modal>
