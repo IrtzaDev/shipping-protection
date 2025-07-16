@@ -224,5 +224,121 @@ export async function action({ request }: ActionFunctionArgs) {
     },
   });
 
+  console.log(productId, "productIdproductId");
+
+  const productOptionsResponse = await admin.graphql(
+    `#graphql
+    query getProductOptions($id: ID!) {
+      product(id: $id) {
+        options {
+          id
+          name
+        }
+      }
+    }`,
+    {
+      variables: { id: productId }
+    }
+  );
+  const productOptionsJson = await productOptionsResponse.json();
+  console.log(JSON.stringify(productOptionsJson, null, 2), "productOptionsJson");
+  const colorOption = productOptionsJson?.data?.product?.options?.find((opt: any) => opt.name === "Title");
+  const optionId = colorOption?.id;
+  console.log(optionId, "optionIdoptionId");
+  if (!optionId) {
+    return json({
+      success: false,
+      error: "Could not find 'Color' option for product",
+    }, 500);
+  }
+
+  // --- DELETE EXISTING VARIANTS BEFORE CREATING NEW ONES ---
+  const existingVariantsResponse = await admin.graphql(
+    `#graphql
+    query getProductVariants($id: ID!) {
+      product(id: $id) {
+        variants(first: 100) {
+          edges {
+            node {
+              id
+            }
+          }
+        }
+      }
+    }`,
+    {
+      variables: { id: productId }
+    }
+  );
+  const existingVariantsJson = await existingVariantsResponse.json();
+  const existingVariants = existingVariantsJson?.data?.product?.variants?.edges || [];
+  for (const variantEdge of existingVariants) {
+    const variantId = variantEdge.node.id;
+    await admin.graphql(
+      `#graphql
+      mutation deleteVariant($input: ProductVariantDeleteInput!) {
+        productVariantDelete(input: $input) {
+          deletedProductVariantId
+          userErrors {
+            field
+            message
+          }
+        }
+      }`,
+      {
+        variables: {
+          input: { id: variantId }
+        }
+      }
+    );
+  }
+  // --- END DELETE VARIANTS ---
+
+  const min = Number(minPrice);
+  const max = Number(maxPrice);
+  const variants = [];
+  for (let i = min; i <= max; i++) {
+    variants.push({
+      optionValues: [
+        { name: i.toString(), optionId },
+      ],
+    });
+  }
+  console.log(variants, "variantsvariants");
+
+  const bulkCreateResponse = await admin.graphql(
+    `#graphql
+    mutation productVariantsBulkCreate($productId: ID!, $variants: [ProductVariantsBulkInput!]!) {
+      productVariantsBulkCreate(productId: $productId, variants: $variants) {
+        productVariants {
+          id
+          title
+        }
+        userErrors {
+          field
+          message
+        }
+      }
+    }
+    `,
+    {
+      variables: {
+        productId,
+        variants: variants,
+      },
+    }
+  );
+  const bulkCreateJson = await bulkCreateResponse.json();
+  const variantErrors = bulkCreateJson?.data?.productVariantsBulkCreate?.userErrors;
+  console.log(variantErrors, "variantErrorsvariantErrors");
+  if (variantErrors && variantErrors.length > 0) {
+    return json({
+      success: false,
+      error: "Variant creation failed",
+      userErrors: variantErrors,
+    }, 500);
+  }
+  // --- VARIANT CREATION LOGIC END ---
+
   return json({ success: true, productId });
 }
