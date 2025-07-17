@@ -174,6 +174,8 @@ export async function action({ request }: ActionFunctionArgs) {
           input: {
             title,
             productType: "fixed-product",
+            status: "ACTIVE",
+            publishedAt: new Date().toISOString(),
             metafields: [
               {
                 namespace: "fixed-product",

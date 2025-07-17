@@ -175,6 +175,8 @@ export async function action({ request }: ActionFunctionArgs) {
           input: {
             title,
             productType: "percentage-product",
+            status: "ACTIVE",
+            publishedAt: new Date().toISOString(),
             metafields: [
               {
                 namespace: "percentage-product",
