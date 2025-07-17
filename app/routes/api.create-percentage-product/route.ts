@@ -307,12 +307,14 @@ console.log(productId,variantIds, 'variantIdsvariantIds')
   const min = Number(minPrice);
   const max = Number(maxPrice);
   const variants = [];
-  for (let i = min; i <= max; i++) {
-    variants.push({
-      optionValues: [
-        { name: i.toString(), optionId },
-      ],
-    });
+  if(min && max) {
+    for (let i = min; i <= max; i++) {
+      variants.push({
+        optionValues: [
+          { name: i.toString(), optionId },
+        ],
+      });
+    }
   }
   console.log(variants, "variantsvariants");
 
