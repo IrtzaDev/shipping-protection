@@ -3,14 +3,13 @@ import { authenticate } from "../shopify.server";
 
 import { io } from "socket.io-client";
 
-
-const socket = io('http://localhost:3001');
+const socket = io("http://localhost:3001");
 
 export const action = async ({ request }: ActionFunctionArgs) => {
   const prisma = (await import("../db.server")).default;
 
   const { topic, payload, admin } = await authenticate.webhook(request);
-console.log(payload, 'payloadpayloadpayloadpayload');  
+  console.log(payload, "payloadpayloadpayloadpayload");
   switch (topic) {
     case "CARTS_CREATE":
     case "CARTS_UPDATE":
@@ -29,7 +28,7 @@ console.log(payload, 'payloadpayloadpayloadpayload');
             id
             title
             descriptionHtml
-            variants(first: 5) {
+            variants(first: 250) {
               edges {
                 node {
                   id
@@ -44,45 +43,104 @@ console.log(payload, 'payloadpayloadpayloadpayload');
 
       try {
         if (!admin) {
-          console.error("Admin client is undefined. Cannot fetch product from Admin API.");
+          console.error(
+            "Admin client is undefined. Cannot fetch product from Admin API.",
+          );
           break;
         }
         // 1. Fetch product from Admin API
         const response = await admin.graphql(query, {
           variables: { id: product?.productId },
         });
-        const json = await response.json();
-        const variantId = json?.data?.product?.variants?.edges?.[0]?.node?.id?.split('/').pop();;
+        const variantData = await response.json();
+        const variantId = variantData?.data?.product?.variants?.edges?.[0]?.node?.id
+          ?.split("/")
+          .pop();
         // const variantId = "gid://shopify/ProductVariant/55642115375473".split('/').pop();
-        console.log(JSON.stringify(json?.data?.product?.variants?.edges), "Shopify Product Data");
+        console.log(
+          JSON.stringify(variantData?.data?.product?.variants?.edges),
+          "Shopify Product Data",
+        );
         console.log(variantId, "Variant ID to add to cart");
 
         // Check if variant already exists in cart
         const cartItems = payload?.line_items || [];
         const variantExistsInCart = cartItems.some((item: any) => {
           console.log(item?.id, variantId, "item?.id");
-         return item?.id == variantId
-        }
-        );
+          return item?.id == variantId;
+        });
 
-        const cartTotal = cartItems.reduce((sum: number, item: any) => sum + (parseFloat(item.price) * Number(item.quantity) || 0), 0);
-console.log(cartTotal, 'cartTotal')
+        const cartTotal = cartItems.reduce(
+          (sum: number, item: any) =>
+            sum + (parseFloat(item.price) * Number(item.quantity) || 0),
+          0,
+        );
+        console.log(cartTotal, "cartTotal");
         const minPrice = JSON.parse(product?.data)?.minPrice;
         const maxPrice = JSON.parse(product?.data)?.maxPrice;
         const isWithinRange = cartTotal >= minPrice && cartTotal <= maxPrice;
-console.log(isWithinRange, 'isWithinRangeisWithinRange')
-        
-        if (cartItems.length > 0 && !variantExistsInCart && isWithinRange) {
-          console.log("Variant not found in cart, emitting socket event");
-          socket.emit("cart:update", {variantId});
-        } else if (cartItems.length > 0 && variantExistsInCart && !isWithinRange) {
-          console.log("Variant exists in cart but outside price range, removing from cart");
-          socket.emit("cart:remove", {variantId});
+        console.log(isWithinRange, "isWithinRangeisWithinRange");
+
+        if (product?.name === "Fixed Amount Product") {
+          if (cartItems.length > 0 && !variantExistsInCart && isWithinRange) {
+            console.log("Variant not found in cart, emitting socket event");
+            socket.emit("cart:update", { variantId });
+          } else if (
+            cartItems.length > 0 &&
+            variantExistsInCart &&
+            !isWithinRange
+          ) {
+            console.log(
+              "Variant exists in cart but outside price range, removing from cart",
+            );
+            socket.emit("cart:remove", { variantId });
+          } else {
+            console.log("Variant already exists in cart, skipping socket emit");
+          }
         } else {
-          console.log("Variant already exists in cart, skipping socket emit");
+          const cartPercent = cartTotal * (JSON.parse(product?.data)?.cartValue)/100;
+          const roundedCartPercent = Math.round(cartPercent);
+          console.log(`percentage ${roundedCartPercent}`);
+          const variants = variantData?.data?.product?.variants?.edges || [];
+          let closestVariant = null;
+          let minDiff = Infinity;
+          for (const edge of variants) {
+            const variant = edge.node;
+            const variantTitleNum = parseFloat(variant.title);
+            const diff = Math.abs(variantTitleNum - roundedCartPercent);
+            if (diff < minDiff) {
+              minDiff = diff;
+              closestVariant = variant;
+            }
+          }
+          if (closestVariant) {
+            console.log(`match variant for in else ${roundedCartPercent}:`, closestVariant.id, closestVariant.title);
+          } else {
+            console.log('No variants found.');
+          }
+          // First, try to find an exact match
+          // let exactMatchVariant = null;
+          // for (const edge of variants) {
+          //   const variant = edge.node;
+          //   const variantTitleNum = parseFloat(variant.title);
+          //   console.log(variantTitleNum, roundedCartPercent, 'variantTitleNum, roundedCartPercent')
+          //   if (variantTitleNum == roundedCartPercent) {
+          //     exactMatchVariant = variant;
+          //     break;
+          //   }
+          // }
+          // if (exactMatchVariant) {
+          //   console.log(`match variant for in if ${roundedCartPercent}:`, exactMatchVariant.id, exactMatchVariant.title);
+          // } else {
+          //   // If no exact match, find the closest
+
+          // }
         }
       } catch (err) {
-        console.error("Error fetching product from Shopify GraphQL or adding to cart", err);
+        console.error(
+          "Error fetching product from Shopify GraphQL or adding to cart",
+          err,
+        );
       }
 
       break;
