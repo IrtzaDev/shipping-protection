@@ -130,6 +130,10 @@ export const action = async ({ request }: ActionFunctionArgs) => {
             console.log("No cart update needed for Fixed Amount Product");
           }
         } else {
+          if (cartItems.length === 0) {
+            console.log("Cart is empty, skipping percentage product logic and socket events.");
+            break;
+          }
           const variants = variantData?.data?.product?.variants?.edges || [];
           const allVariantIds = variants.map((edge: any) => edge.node.id?.split("/").pop()?.toString());
           // Subtract price of any percentage product variants already in cart
