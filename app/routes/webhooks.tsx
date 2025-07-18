@@ -114,27 +114,37 @@ export const action = async ({ request }: ActionFunctionArgs) => {
             }
           }
           if (closestVariant) {
-            console.log(`match variant for in else ${roundedCartPercent}:`, closestVariant.id, closestVariant.title);
+            // Check if closestVariant is already in cart
+            const closestVariantId = closestVariant.id?.split("/").pop()?.toString();
+            // Find all variant IDs for this product
+            const allVariantIds = variants.map((edge: any) => edge.node.id?.split("/").pop()?.toString());
+            // Debug logs
+            console.log("All variant IDs:", allVariantIds);
+            console.log("Cart item IDs:", cartItems.map((i: any) => i.id?.toString()));
+            console.log("Closest variant ID:", closestVariantId);
+            // Find all percentage-based variants in cart except the one to be added
+            const percentageVariantsInCart = cartItems.filter((item: any) => {
+              return allVariantIds.includes(item?.id?.toString()) && item?.id?.toString() != closestVariantId;
+            });
+            console.log("Variants to remove:", percentageVariantsInCart.map((i: any) => i.id?.toString()));
+            // Remove all other percentage-based variants from cart
+            for (const item of percentageVariantsInCart) {
+              console.log(`Removing previous percentage variant from cart: ${item.id}`);
+              socket.emit("cart:remove", { variantId: item.id });
+            }
+            // Add the closest variant if not already in cart
+            const closestVariantExistsInCart = cartItems.some((item: any) => {
+              return item?.id?.toString() == closestVariantId;
+            });
+            if (!closestVariantExistsInCart) {
+              console.log(`match variant for in else ${roundedCartPercent}:`, closestVariant.id, closestVariant.title);
+              socket.emit("cart:update", { variantId: closestVariantId });
+            } else {
+              console.log("Closest variant already exists in cart, skipping socket emit");
+            }
           } else {
             console.log('No variants found.');
           }
-          // First, try to find an exact match
-          // let exactMatchVariant = null;
-          // for (const edge of variants) {
-          //   const variant = edge.node;
-          //   const variantTitleNum = parseFloat(variant.title);
-          //   console.log(variantTitleNum, roundedCartPercent, 'variantTitleNum, roundedCartPercent')
-          //   if (variantTitleNum == roundedCartPercent) {
-          //     exactMatchVariant = variant;
-          //     break;
-          //   }
-          // }
-          // if (exactMatchVariant) {
-          //   console.log(`match variant for in if ${roundedCartPercent}:`, exactMatchVariant.id, exactMatchVariant.title);
-          // } else {
-          //   // If no exact match, find the closest
-
-          // }
         }
       } catch (err) {
         console.error(
