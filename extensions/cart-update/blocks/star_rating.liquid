@@ -1,0 +1,25 @@
+<cart-update
+data-builder_id="{{ block.settings.builder_id }}"
+>
+
+<div id='page-builder'>
+</div>
+</cart-update>
+
+<script src="http://localhost:3001/socket.io/socket.io.js"></script>
+
+
+{% schema %}
+{
+  "name": "cart-update",
+  "stylesheet": "style.css",
+  "target": "section",
+  "javascript": "index.js",
+  "settings": [{
+      "type": "text",
+      "id": "builder_id",
+      "label": "Builder ID",
+      "default": "0"
+    }]
+}
+{% endschema %}

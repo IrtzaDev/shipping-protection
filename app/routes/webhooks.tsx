@@ -70,11 +70,12 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           return item?.id == variantId;
         });
 
-        const cartTotal = cartItems.reduce(
+        let cartTotal = cartItems.reduce(
           (sum: number, item: any) =>
             sum + (parseFloat(item.price) * Number(item.quantity) || 0),
           0,
         );
+
         console.log(cartTotal, "cartTotal");
         const minPrice = JSON.parse(product?.data)?.minPrice;
         const maxPrice = JSON.parse(product?.data)?.maxPrice;
@@ -82,6 +83,9 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         console.log(isWithinRange, "isWithinRangeisWithinRange");
 
         if (product?.name === "Fixed Amount Product") {
+          if(variantExistsInCart){
+            cartTotal-=JSON.parse(product?.data)?.defaultFee;
+          }
           if (cartItems.length > 0 && !variantExistsInCart && isWithinRange) {
             console.log("Variant not found in cart, emitting socket event");
             socket.emit("cart:update", { variantId });
@@ -130,7 +134,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
             // Remove all other percentage-based variants from cart
             for (const item of percentageVariantsInCart) {
               console.log(`Removing previous percentage variant from cart: ${item.id}`);
-              socket.emit("cart:remove", { variantId: item.id });
+              socket.emit("cart:remove", { variantId: String(item.id) });
             }
             // Add the closest variant if not already in cart
             const closestVariantExistsInCart = cartItems.some((item: any) => {
