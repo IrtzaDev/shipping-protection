@@ -191,6 +191,94 @@ export async function action({ request }: ActionFunctionArgs) {
 
     response = await createResponse.json();
     productId = response?.data?.productCreate?.product?.id;
+
+    // --- Set inventory to 1 for the new product ---
+    if (productId) {
+      // 1. Get the default variant's inventoryItemId
+      const variantRes = await admin.graphql(
+        `#graphql
+        query getProductVariantInventoryItem($id: ID!) {
+          product(id: $id) {
+            variants(first: 1) {
+              edges {
+                node {
+                  id
+                  inventoryItem {
+                    id
+                  }
+                }
+              }
+            }
+          }
+        }
+        `,
+        { variables: { id: productId } }
+      );
+      const variantJson = await variantRes.json();
+      const inventoryItemId = variantJson?.data?.product?.variants?.edges?.[0]?.node?.inventoryItem?.id;
+
+      // 2. Get the first locationId
+      const locationRes = await admin.graphql(
+        `#graphql
+        query getLocations {
+          locations(first: 1) {
+            edges {
+              node {
+                id
+                name
+              }
+            }
+          }
+        }
+        `
+      );
+      const locationJson = await locationRes.json();
+      const locationId = locationJson?.data?.locations?.edges?.[0]?.node?.id;
+
+      console.log(inventoryItemId, locationId, "inventoryItemId, locationId");
+      // 3. Adjust inventory if both IDs are present
+      if (inventoryItemId && locationId) {
+        const adjustRes = await admin.graphql(
+          `#graphql
+          mutation inventoryAdjustQuantities($input: InventoryAdjustQuantitiesInput!) {
+            inventoryAdjustQuantities(input: $input) {
+              userErrors {
+                field
+                message
+              }
+              inventoryAdjustmentGroup {
+                changes {
+                  name
+                  delta
+                }
+              }
+            }
+          }
+          `,
+          {
+            variables: {
+              input: {
+                reason: "correction",
+                name: "available",
+                changes: [
+                  {
+                    delta: 1,
+                    inventoryItemId,
+                    locationId,
+                  },
+                ],
+              },
+            },
+          }
+        );
+        const adjustJson = await adjustRes.json();
+        if (adjustJson?.data?.inventoryAdjustQuantities?.userErrors?.length) {
+          console.warn("Failed to set inventory:", adjustJson.data.inventoryAdjustQuantities.userErrors);
+        }
+      } else {
+        console.warn("Could not set inventory: missing inventoryItemId or locationId", { inventoryItemId, locationId });
+      }
+    }
   }
 
   const userErrors =

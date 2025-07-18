@@ -354,5 +354,95 @@ console.log(productId,variantIds, 'variantIdsvariantIds')
   }
   // --- VARIANT CREATION LOGIC END ---
 
+  // --- SET INVENTORY TO 1 FOR EVERY VARIANT ---
+  // 1. Get all variants with inventoryItemId
+  const allVariantsRes = await admin.graphql(
+    `#graphql
+    query getAllProductVariantsInventoryItems($id: ID!) {
+      product(id: $id) {
+        variants(first: 100) {
+          edges {
+            node {
+              id
+              inventoryItem {
+                id
+              }
+            }
+          }
+        }
+      }
+    }
+    `,
+    { variables: { id: productId } }
+  );
+  const allVariantsJson = await allVariantsRes.json();
+  const variantEdges = allVariantsJson?.data?.product?.variants?.edges || [];
+  const inventoryChanges = variantEdges
+    .map((edge: any) => {
+      const inventoryItemId = edge.node?.inventoryItem?.id;
+      return inventoryItemId ? { inventoryItemId, delta: 1 } : null;
+    })
+    .filter(Boolean);
+
+  // 2. Get the first locationId
+  const locationRes = await admin.graphql(
+    `#graphql
+    query getLocations {
+      locations(first: 1) {
+        edges {
+          node {
+            id
+            name
+          }
+        }
+      }
+    }
+    `
+  );
+  const locationJson = await locationRes.json();
+  const locationId = locationJson?.data?.locations?.edges?.[0]?.node?.id;
+
+  // 3. Adjust inventory for all variants
+  if (inventoryChanges.length > 0 && locationId) {
+    const adjustRes = await admin.graphql(
+      `#graphql
+      mutation inventoryAdjustQuantities($input: InventoryAdjustQuantitiesInput!) {
+        inventoryAdjustQuantities(input: $input) {
+          userErrors {
+            field
+            message
+          }
+          inventoryAdjustmentGroup {
+            changes {
+              name
+              delta
+            }
+          }
+        }
+      }
+      `,
+      {
+        variables: {
+          input: {
+            reason: "correction",
+            name: "available",
+            changes: inventoryChanges.map((change: any) => ({
+              delta: 1,
+              inventoryItemId: change.inventoryItemId,
+              locationId,
+            })),
+          },
+        },
+      }
+    );
+    const adjustJson = await adjustRes.json();
+    if (adjustJson?.data?.inventoryAdjustQuantities?.userErrors?.length) {
+      console.warn("Failed to set inventory for variants:", adjustJson.data.inventoryAdjustQuantities.userErrors);
+    }
+  } else {
+    console.warn("Could not set inventory for all variants: missing inventoryItemIds or locationId", { inventoryChanges, locationId });
+  }
+  // --- END SET INVENTORY ---
+
   return json({ success: true, productId });
 }
