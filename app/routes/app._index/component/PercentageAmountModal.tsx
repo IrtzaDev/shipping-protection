@@ -24,6 +24,12 @@ export default function PercentageAmountModal({
   }, [percentageProductData]);
 
   const handleSubmit = () => {
+    if(!defaultFee || !minPrice || !maxPrice){
+      shopify.toast.show("Please fill all the fields", {
+        isError: true,
+      });
+      return;
+    }
     if (Number(minPrice) > Number(maxPrice)) {
       shopify.toast.show("Minimum should not be greater than Maximum", {
         isError: true,

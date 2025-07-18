@@ -130,10 +130,19 @@ export const action = async ({ request }: ActionFunctionArgs) => {
             console.log("No cart update needed for Fixed Amount Product");
           }
         } else {
-          const cartPercent = cartTotal * (JSON.parse(product?.data)?.cartValue)/100;
+          const variants = variantData?.data?.product?.variants?.edges || [];
+          const allVariantIds = variants.map((edge: any) => edge.node.id?.split("/").pop()?.toString());
+          // Subtract price of any percentage product variants already in cart
+          const percentageVariantsInCart = cartItems.filter((item: any) => {
+            return allVariantIds.includes(item?.id?.toString());
+          });
+          let cartTotalWithoutPercentageProduct = cartTotal;
+          for (const item of percentageVariantsInCart) {
+            cartTotalWithoutPercentageProduct -= (parseFloat(item.price) * Number(item.quantity) || 0);
+          }
+          const cartPercent = cartTotalWithoutPercentageProduct * (JSON.parse(product?.data)?.cartValue)/100;
           const roundedCartPercent = Math.round(cartPercent);
           console.log(`percentage ${roundedCartPercent}`);
-          const variants = variantData?.data?.product?.variants?.edges || [];
           let closestVariant = null;
           let minDiff = Infinity;
           for (const edge of variants) {
@@ -147,22 +156,22 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           }
           if (closestVariant) {
             const closestVariantId = closestVariant.id?.split("/").pop()?.toString();
-            const allVariantIds = variants.map((edge: any) => edge.node.id?.split("/").pop()?.toString());
             console.log("All variant IDs:", allVariantIds);
             console.log("Cart item IDs:", cartItems.map((i: any) => i.id?.toString()));
             console.log("Closest variant ID:", closestVariantId);
-            const percentageVariantsInCart = cartItems.filter((item: any) => {
+            // Only remove percentage variants that are not the closest one
+            const percentageVariantsToRemove = cartItems.filter((item: any) => {
               return allVariantIds.includes(item?.id?.toString()) && item?.id?.toString() != closestVariantId;
             });
-            console.log("Variants to remove:", percentageVariantsInCart.map((i: any) => i.id?.toString()));
+            console.log("Variants to remove:", percentageVariantsToRemove.map((i: any) => i.id?.toString()));
             const closestVariantExistsInCart = cartItems.some((item: any) => {
               return item?.id?.toString() == closestVariantId;
             });
             // Generate a unique cartId for this operation (in real app, use actual cart id)
             const cartId = payload?.id || uuidv4();
-            if (percentageVariantsInCart.length > 0) {
+            if (percentageVariantsToRemove.length > 0) {
               // Remove all other percentage-based variants from cart
-              for (const item of percentageVariantsInCart) {
+              for (const item of percentageVariantsToRemove) {
                 console.log(`Removing previous percentage variant from cart: ${item.id}`);
                 socket.emit("cart:remove", { variantId: String(item.id), cartId });
               }
