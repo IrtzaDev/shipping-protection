@@ -145,6 +145,63 @@ export async function action({ request }: ActionFunctionArgs) {
     );
 
     response = await updateResponse.json();
+
+    // --- Set price for the default variant to defaultFee when updating ---
+    // 1. Get the default variant's ID
+    const variantRes = await admin.graphql(
+      `#graphql
+      query getProductVariantInventoryItem($id: ID!) {
+        product(id: $id) {
+          variants(first: 1) {
+            edges {
+              node {
+                id
+              }
+            }
+          }
+        }
+      }
+      `,
+      { variables: { id: productId } }
+    );
+    const variantJson = await variantRes.json();
+    const variantNode = variantJson?.data?.product?.variants?.edges?.[0]?.node;
+    const variantId = variantNode?.id;
+    if (variantId) {
+      const updateVariantRes = await admin.graphql(
+        `#graphql
+        mutation productVariantsBulkUpdate($productId: ID!, $variants: [ProductVariantsBulkInput!]!) {
+          productVariantsBulkUpdate(productId: $productId, variants: $variants) {
+            productVariants {
+              id
+              price
+            }
+            userErrors {
+              field
+              message
+            }
+          }
+        }
+        `,
+        {
+          variables: {
+            productId,
+            variants: [
+              {
+                id: variantId,
+                price: defaultFee.toString(),
+              },
+            ],
+          },
+        }
+      );
+      const updateVariantJson = await updateVariantRes.json();
+      if (updateVariantJson?.data?.productVariantsBulkUpdate?.userErrors?.length) {
+        console.warn("Failed to set variant price (update):", updateVariantJson.data.productVariantsBulkUpdate.userErrors);
+      }
+    } else {
+      console.warn("Could not set price (update): missing variantId");
+    }
   } else {
     // ➕ Step 3: Create product if it doesn’t exist
     const createResponse: any = await admin?.graphql(
@@ -192,9 +249,9 @@ export async function action({ request }: ActionFunctionArgs) {
     response = await createResponse.json();
     productId = response?.data?.productCreate?.product?.id;
 
-    // --- Set inventory to 1 for the new product ---
+    // --- Set price for the default variant to defaultFee ---
     if (productId) {
-      // 1. Get the default variant's inventoryItemId
+      // 1. Get the default variant's inventoryItemId and variantId
       const variantRes = await admin.graphql(
         `#graphql
         query getProductVariantInventoryItem($id: ID!) {
@@ -215,9 +272,48 @@ export async function action({ request }: ActionFunctionArgs) {
         { variables: { id: productId } }
       );
       const variantJson = await variantRes.json();
-      const inventoryItemId = variantJson?.data?.product?.variants?.edges?.[0]?.node?.inventoryItem?.id;
+      const variantNode = variantJson?.data?.product?.variants?.edges?.[0]?.node;
+      const variantId = variantNode?.id;
+      const inventoryItemId = variantNode?.inventoryItem?.id;
 
-      // 2. Get the first locationId
+      // 2. Set the price of the default variant
+      if (variantId) {
+        const updateVariantRes = await admin.graphql(
+          `#graphql
+          mutation productVariantsBulkUpdate($productId: ID!, $variants: [ProductVariantsBulkInput!]!) {
+            productVariantsBulkUpdate(productId: $productId, variants: $variants) {
+              productVariants {
+                id
+                price
+              }
+              userErrors {
+                field
+                message
+              }
+            }
+          }
+          `,
+          {
+            variables: {
+              productId,
+              variants: [
+                {
+                  id: variantId,
+                  price: defaultFee.toString(),
+                },
+              ],
+            },
+          }
+        );
+        const updateVariantJson = await updateVariantRes.json();
+        if (updateVariantJson?.data?.productVariantsBulkUpdate?.userErrors?.length) {
+          console.warn("Failed to set variant price:", updateVariantJson.data.productVariantsBulkUpdate.userErrors);
+        }
+      } else {
+        console.warn("Could not set price: missing variantId");
+      }
+
+      // 3. Get the first locationId
       const locationRes = await admin.graphql(
         `#graphql
         query getLocations {
@@ -236,7 +332,7 @@ export async function action({ request }: ActionFunctionArgs) {
       const locationId = locationJson?.data?.locations?.edges?.[0]?.node?.id;
 
       console.log(inventoryItemId, locationId, "inventoryItemId, locationId");
-      // 3. Adjust inventory if both IDs are present
+      // 4. Adjust inventory if both IDs are present
       if (inventoryItemId && locationId) {
         const adjustRes = await admin.graphql(
           `#graphql

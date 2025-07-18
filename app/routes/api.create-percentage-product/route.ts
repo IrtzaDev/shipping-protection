@@ -315,6 +315,7 @@ console.log(productId,variantIds, 'variantIdsvariantIds')
         optionValues: [
           { name: i.toString(), optionId },
         ],
+        price: i.toString(),
       });
     }
   }
