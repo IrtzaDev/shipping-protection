@@ -86,7 +86,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
         let cartTotal = cartItems.reduce(
           (sum: number, item: any) =>
-            sum + (parseFloat(item.price) * Number(item.quantity) || 0),
+            sum + (parseFloat(item?.original_line_price_set?.shop_money?.amount) || 0),
           0,
         );
 
@@ -96,13 +96,11 @@ export const action = async ({ request }: ActionFunctionArgs) => {
             .filter((item: any) => item.id != variantId)
             .reduce(
               (sum: number, item: any) =>
-                sum + (parseFloat(item.price) * Number(item.quantity) || 0),
+                sum + (parseFloat(item?.original_line_price_set?.shop_money?.amount) || 0),
               0,
             );
-          let defaultFee = JSON.parse(product?.data)?.defaultFee;
           const minPrice = JSON.parse(product?.data)?.minPrice;
           const maxPrice = JSON.parse(product?.data)?.maxPrice;
-          defaultFee = Number(defaultFee);
 
           const isWithinRangeWithFee = cartTotalWithoutFee >= minPrice && cartTotalWithoutFee <= maxPrice;
           if (cartItems.length > 0 && !variantExistsInCart && isWithinRangeWithFee) {
