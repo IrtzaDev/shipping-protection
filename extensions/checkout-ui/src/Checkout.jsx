@@ -3,13 +3,12 @@ import {
   Banner,
   BlockStack,
   Checkbox,
-  Text,
   useApi,
   useInstructions,
   useTranslate,
   useApplyCartLinesChange,
 } from "@shopify/ui-extensions-react/checkout";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
 // 1. Choose an extension target
 export default reactExtension("purchase.checkout.block.render", () => (
