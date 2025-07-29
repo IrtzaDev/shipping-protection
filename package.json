@@ -1,5 +1,5 @@
 {
-  "name": "radica",
+  "name": "shipping-protection",
   "private": true,
   "scripts": {
     "build": "remix vite:build",

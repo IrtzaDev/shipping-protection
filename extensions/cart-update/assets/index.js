@@ -22,7 +22,7 @@ class ThemeExtensionBody extends HTMLElement {
         console.log('remove socket called', data)
 
         const response = await fetch(
-          `https://shipping-production.myshopify.com/cart/change.js`,
+          `https://mailboxdealer.com/cart/change.js`,
           {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -65,7 +65,7 @@ class ThemeExtensionBody extends HTMLElement {
         };
 
         const response = await fetch(
-          `https://shipping-production.myshopify.com/cart/add.js`,
+          `https://mailboxdealer.com/cart/add.js`,
           {
             method: "POST",
             headers: { "Content-Type": "application/json" },
