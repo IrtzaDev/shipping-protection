@@ -36,6 +36,14 @@ export default function PercentageAmountModal({
       });
       return;
     }
+
+    if((Number(maxPrice) - Number(minPrice)) >= 100){
+      shopify.toast.show("Difference between Minimum and Maximum should not be greater than 100", {
+        isError: true,
+      });
+      return;
+    }
+
     const formPayload = {
       cartValue: defaultFee,
       minPrice,

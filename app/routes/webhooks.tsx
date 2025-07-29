@@ -90,12 +90,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           0,
         );
 
-        console.log(cartTotal, "cartTotal");
-        const minPrice = JSON.parse(product?.data)?.minPrice;
-        const maxPrice = JSON.parse(product?.data)?.maxPrice;
-        const isWithinRange = cartTotal >= minPrice && cartTotal <= maxPrice;
-        console.log(isWithinRange, "isWithinRangeisWithinRange");
-
         if (product?.name === "Fixed Amount Product") {
           // Calculate cart total without the fixed amount product
           let cartTotalWithoutFee = cartItems
@@ -105,12 +99,12 @@ export const action = async ({ request }: ActionFunctionArgs) => {
                 sum + (parseFloat(item.price) * Number(item.quantity) || 0),
               0,
             );
-          const defaultFee = JSON.parse(product?.data)?.defaultFee;
+          let defaultFee = JSON.parse(product?.data)?.defaultFee;
           const minPrice = JSON.parse(product?.data)?.minPrice;
           const maxPrice = JSON.parse(product?.data)?.maxPrice;
+          defaultFee = Number(defaultFee);
 
-          const isWithinRangeWithFee = (cartTotalWithoutFee + defaultFee) >= minPrice && (cartTotalWithoutFee + defaultFee) <= maxPrice;
-
+          const isWithinRangeWithFee = cartTotalWithoutFee >= minPrice && cartTotalWithoutFee <= maxPrice;
           if (cartItems.length > 0 && !variantExistsInCart && isWithinRangeWithFee) {
             // Add the product
             console.log("Variant not found in cart, emitting socket event");
