@@ -134,7 +134,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           });
           let cartTotalWithoutPercentageProduct = cartTotal;
           for (const item of percentageVariantsInCart) {
-            cartTotalWithoutPercentageProduct -= (parseFloat(item.price) * Number(item.quantity) || 0);
+            cartTotalWithoutPercentageProduct -= (parseFloat(item.original_line_price_set?.shop_money?.amount) || 0);
           }
           const cartPercent = cartTotalWithoutPercentageProduct * (JSON.parse(product?.data)?.cartValue)/100;
           const roundedCartPercent = Math.round(cartPercent);
@@ -152,7 +152,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           }
           if (closestVariant) {
             const closestVariantId = closestVariant.id?.split("/").pop()?.toString();
-            console.log("All variant IDs:", allVariantIds);
             console.log("Cart item IDs:", cartItems.map((i: any) => i.id?.toString()));
             console.log("Closest variant ID:", closestVariantId);
             // Only remove percentage variants that are not the closest one
