@@ -249,14 +249,132 @@ export async function action({ request }: ActionFunctionArgs) {
     response = await createResponse.json();
     productId = response?.data?.productCreate?.product?.id;
 
-    // --- Set price for the default variant to defaultFee ---
+    // --- VARIANT CREATION LOGIC ---
     if (productId) {
-      // 1. Get the default variant's inventoryItemId and variantId
-      const variantRes = await admin.graphql(
+      // Get product options to find the Title option
+      const productOptionsResponse = await admin.graphql(
         `#graphql
-        query getProductVariantInventoryItem($id: ID!) {
+        query getProductOptions($id: ID!) {
           product(id: $id) {
-            variants(first: 1) {
+            options {
+              id
+              name
+            }
+          }
+        }`,
+        {
+          variables: { id: productId }
+        }
+      );
+      const productOptionsJson = await productOptionsResponse.json();
+      const titleOption = productOptionsJson?.data?.product?.options?.find((opt: any) => opt.name === "Title");
+      const optionId = titleOption?.id;
+      
+      if (!optionId) {
+        return json({
+          success: false,
+          error: "Could not find 'Title' option for product",
+        }, 500);
+      }
+
+      // Delete existing variants before creating new ones
+      const existingVariantsResponse = await admin.graphql(
+        `#graphql
+        query getProductVariants($id: ID!) {
+          product(id: $id) {
+            variants(first: 100) {
+              edges {
+                node {
+                  id
+                }
+              }
+            }
+          }
+        }`,
+        {
+          variables: { id: productId }
+        }
+      );
+      const existingVariantsJson = await existingVariantsResponse.json();
+      const existingVariants = existingVariantsJson?.data?.product?.variants?.edges || [];
+      const variantIds = existingVariants.map((edge: any) => edge.node.id);
+
+      if (variantIds.length > 0) {
+        const bulkDeleteResponse = await admin.graphql(
+          `#graphql
+          mutation bulkDeleteProductVariants($productId: ID!, $variantsIds: [ID!]!) {
+            productVariantsBulkDelete(productId: $productId, variantsIds: $variantsIds) {
+              product {
+                id
+                title
+              }
+              userErrors {
+                field
+                message
+              }
+            }
+          }`,
+          {
+            variables: {
+              productId,
+              variantsIds: variantIds
+            },
+          }
+        );
+        const bulkDeleteJson = await bulkDeleteResponse.json();
+        const deleteErrors = bulkDeleteJson?.data?.productVariantsBulkDelete?.userErrors;
+        if (deleteErrors && deleteErrors.length > 0) {
+          console.warn("Failed to bulk delete variants:", deleteErrors);
+        }
+      }
+
+      // Create the 'Fixed' variant
+      const variants = [{
+        optionValues: [
+          { name: "Fixed", optionId },
+        ],
+        price: defaultFee.toString(),
+      }];
+
+      const bulkCreateResponse = await admin.graphql(
+        `#graphql
+        mutation productVariantsBulkCreate($productId: ID!, $variants: [ProductVariantsBulkInput!]!) {
+          productVariantsBulkCreate(productId: $productId, variants: $variants) {
+            productVariants {
+              id
+              title
+            }
+            userErrors {
+              field
+              message
+            }
+          }
+        }
+        `,
+        {
+          variables: {
+            productId,
+            variants: variants,
+          },
+        }
+      );
+      const bulkCreateJson = await bulkCreateResponse.json();
+      const variantErrors = bulkCreateJson?.data?.productVariantsBulkCreate?.userErrors;
+      
+      if (variantErrors && variantErrors.length > 0) {
+        return json({
+          success: false,
+          error: "Variant creation failed",
+          userErrors: variantErrors,
+        }, 500);
+      }
+
+      // Set inventory to 1 for the variant
+      const allVariantsRes = await admin.graphql(
+        `#graphql
+        query getAllProductVariantsInventoryItems($id: ID!) {
+          product(id: $id) {
+            variants(first: 100) {
               edges {
                 node {
                   id
@@ -271,49 +389,16 @@ export async function action({ request }: ActionFunctionArgs) {
         `,
         { variables: { id: productId } }
       );
-      const variantJson = await variantRes.json();
-      const variantNode = variantJson?.data?.product?.variants?.edges?.[0]?.node;
-      const variantId = variantNode?.id;
-      const inventoryItemId = variantNode?.inventoryItem?.id;
+      const allVariantsJson = await allVariantsRes.json();
+      const variantEdges = allVariantsJson?.data?.product?.variants?.edges || [];
+      const inventoryChanges = variantEdges
+        .map((edge: any) => {
+          const inventoryItemId = edge.node?.inventoryItem?.id;
+          return inventoryItemId ? { inventoryItemId, delta: 1 } : null;
+        })
+        .filter(Boolean);
 
-      // 2. Set the price of the default variant
-      if (variantId) {
-        const updateVariantRes = await admin.graphql(
-          `#graphql
-          mutation productVariantsBulkUpdate($productId: ID!, $variants: [ProductVariantsBulkInput!]!) {
-            productVariantsBulkUpdate(productId: $productId, variants: $variants) {
-              productVariants {
-                id
-                price
-              }
-              userErrors {
-                field
-                message
-              }
-            }
-          }
-          `,
-          {
-            variables: {
-              productId,
-              variants: [
-                {
-                  id: variantId,
-                  price: defaultFee.toString(),
-                },
-              ],
-            },
-          }
-        );
-        const updateVariantJson = await updateVariantRes.json();
-        if (updateVariantJson?.data?.productVariantsBulkUpdate?.userErrors?.length) {
-          console.warn("Failed to set variant price:", updateVariantJson.data.productVariantsBulkUpdate.userErrors);
-        }
-      } else {
-        console.warn("Could not set price: missing variantId");
-      }
-
-      // 3. Get the first locationId
+      // Get the first locationId
       const locationRes = await admin.graphql(
         `#graphql
         query getLocations {
@@ -331,9 +416,8 @@ export async function action({ request }: ActionFunctionArgs) {
       const locationJson = await locationRes.json();
       const locationId = locationJson?.data?.locations?.edges?.[0]?.node?.id;
 
-      console.log(inventoryItemId, locationId, "inventoryItemId, locationId");
-      // 4. Adjust inventory if both IDs are present
-      if (inventoryItemId && locationId) {
+      // Adjust inventory for all variants
+      if (inventoryChanges.length > 0 && locationId) {
         const adjustRes = await admin.graphql(
           `#graphql
           mutation inventoryAdjustQuantities($input: InventoryAdjustQuantitiesInput!) {
@@ -356,23 +440,21 @@ export async function action({ request }: ActionFunctionArgs) {
               input: {
                 reason: "correction",
                 name: "available",
-                changes: [
-                  {
-                    delta: 1,
-                    inventoryItemId,
-                    locationId,
-                  },
-                ],
+                changes: inventoryChanges.map((change: any) => ({
+                  delta: 1,
+                  inventoryItemId: change.inventoryItemId,
+                  locationId,
+                })),
               },
             },
           }
         );
         const adjustJson = await adjustRes.json();
         if (adjustJson?.data?.inventoryAdjustQuantities?.userErrors?.length) {
-          console.warn("Failed to set inventory:", adjustJson.data.inventoryAdjustQuantities.userErrors);
+          console.warn("Failed to set inventory for variants:", adjustJson.data.inventoryAdjustQuantities.userErrors);
         }
       } else {
-        console.warn("Could not set inventory: missing inventoryItemId or locationId", { inventoryItemId, locationId });
+        console.warn("Could not set inventory for variants: missing inventoryItemIds or locationId", { inventoryChanges, locationId });
       }
     }
   }
